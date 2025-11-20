@@ -2,6 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const chatForm = document.getElementById("chat-form");
   const userInput = document.getElementById("user-input");
   const chatWindow = document.getElementById("chat-window"); // Function to append message to chat window
+  const API_URL = "/api";
   function appendMessage(text, sender) {
     const messageDiv = document.createElement("div");
     messageDiv.classList.add("message", sender);
@@ -23,7 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
     appendMessage("...", "bot");
     try {
       // Replace with your backend API URL
-      const response = await fetch("http://127.0.0.1:5000/api/chat", {
+      const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),

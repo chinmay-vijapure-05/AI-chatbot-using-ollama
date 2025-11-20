@@ -1,1 +1,5 @@
+flask
 requests
+ollama
+python-dotenv
+Flask-Cors
