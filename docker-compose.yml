@@ -1,18 +1,52 @@
 version: '3.8'
 
 services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: chatbot-ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    environment:
+      - OLLAMA_MODELS=${OLLAMA_MODEL:-gemma:2b}
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - chatbot-network
+    restart: unless-stopped
+    # Pull and run model on startup
+    entrypoint: sh -c 'ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-gemma:2b} && wait'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: chatbot-backend
     ports:
-      - "5000:5000"
+      - "${BACKEND_PORT:-5000}:5000"
     environment:
-      - FLASK_ENV=production
+      - FLASK_DEBUG=${FLASK_DEBUG:-False}
+      - PORT=5000
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma:2b}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
     networks:
       - chatbot-network
+    depends_on:
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
   frontend:
     build:
@@ -20,13 +54,23 @@ services:
       dockerfile: Dockerfile
     container_name: chatbot-frontend
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - chatbot-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/index.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
 networks:
   chatbot-network:
     driver: bridge
+
+volumes:
+  ollama_data:

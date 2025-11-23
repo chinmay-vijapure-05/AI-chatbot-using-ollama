@@ -1,8 +1,21 @@
 document.addEventListener("DOMContentLoaded", () => {
   const chatForm = document.getElementById("chat-form");
   const userInput = document.getElementById("user-input");
-  const chatWindow = document.getElementById("chat-window"); // Function to append message to chat window
-  const API_URL = "/api";
+  const chatWindow = document.getElementById("chat-window");
+  
+  // Dynamically determine API URL
+  const getApiUrl = () => {
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      // Local development
+      return 'http://localhost:5000/api';
+    } else {
+      // Production: use relative path (Nginx proxy will route it)
+      return '/api';
+    }
+  };
+  
+  const API_URL = getApiUrl();
+
   function appendMessage(text, sender) {
     const messageDiv = document.createElement("div");
     messageDiv.classList.add("message", sender);
@@ -12,28 +25,30 @@ document.addEventListener("DOMContentLoaded", () => {
     messageDiv.appendChild(bubble);
     chatWindow.appendChild(messageDiv);
     chatWindow.scrollTop = chatWindow.scrollHeight;
-  } // Handle form submit
+  }
+
   chatForm.addEventListener("submit", async function (e) {
     e.preventDefault();
     const prompt = userInput.value.trim();
     if (!prompt) return;
+
     appendMessage(prompt, "user");
     userInput.value = "";
     userInput.disabled = true;
-    // Show loading response
     appendMessage("...", "bot");
+
     try {
-      // Replace with your backend API URL
       const response = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
       });
+
       const oldBotMsg = chatWindow.querySelector(".bot:last-child .bubble");
       if (!response.ok) {
         oldBotMsg.textContent = "Error: Unable to get response from AI.";
       } else {
-        const data = await response.json(); // Remove loading placeholder before showing actual response
+        const data = await response.json();
         oldBotMsg.textContent = data.reply || "(No reply)";
       }
     } catch (error) {
