@@ -7,14 +7,14 @@ services:
     ports:
       - "${OLLAMA_PORT:-11434}:11434"
     environment:
-      - OLLAMA_MODELS=${OLLAMA_MODEL:-gemma:2b}
+      - OLLAMA_MODELS=${OLLAMA_MODEL:-gemma3}
     volumes:
       - ollama_data:/root/.ollama
     networks:
       - chatbot-network
     restart: unless-stopped
     # Pull and run model on startup
-    entrypoint: sh -c 'ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-gemma:2b} && wait'
+    entrypoint: sh -c 'ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-gemma3} && wait'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
@@ -33,7 +33,7 @@ services:
       - FLASK_DEBUG=${FLASK_DEBUG:-False}
       - PORT=5000
       - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma:2b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma3}
       - ENVIRONMENT=${ENVIRONMENT:-production}
     networks:
       - chatbot-network
