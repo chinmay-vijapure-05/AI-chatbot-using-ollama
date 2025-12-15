@@ -8,9 +8,9 @@ COPY . .
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Install wget for HEALTHCHECK and ensure files are owned by the existing nginx user
+# Install wget for HEALTHCHECK and ensure files are readable
 RUN apk add --no-cache wget && chown -R nginx:nginx /usr/share/nginx/html
-USER nginx
+# Note: nginx runs as root in container but drops to nginx user for worker processes
 
 EXPOSE 80
 

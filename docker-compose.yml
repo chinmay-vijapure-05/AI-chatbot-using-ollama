@@ -13,14 +13,14 @@ services:
     networks:
       - chatbot-network
     restart: unless-stopped
-    # Pull and run model on startup
-    entrypoint: sh -c 'ollama serve & sleep 5 && ollama pull ${OLLAMA_MODEL:-gemma:2b} && wait'
+    # Pull model on startup (ollama serve runs automatically)
+    entrypoint: sh -c 'ollama serve & sleep 10 && ollama pull ${OLLAMA_MODEL:-gemma:2b} && tail -f /dev/null'
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
 
   backend:
     build:

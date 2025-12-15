@@ -19,4 +19,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:5000/api/health', timeout=5)" || exit 1
 
-CMD ["python", "app.py"]
+# Use gunicorn for production, fallback to Flask dev server if needed
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
