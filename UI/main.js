@@ -1,62 +1,57 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const chatForm = document.getElementById("chat-form");
-  const userInput = document.getElementById("user-input");
+  const form = document.getElementById("chat-form");
+  const input = document.getElementById("user-input");
   const chatWindow = document.getElementById("chat-window");
-  
-  // Dynamically determine API URL
-  const getApiUrl = () => {
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      // Local development
-      return 'http://localhost:5000/api';
-    } else {
-      // Production: use relative path (Nginx proxy will route it)
-      return '/api';
-    }
-  };
-  
-  const API_URL = getApiUrl();
 
-  function appendMessage(text, sender) {
-    const messageDiv = document.createElement("div");
-    messageDiv.classList.add("message", sender);
-    const bubble = document.createElement("div");
-    bubble.classList.add("bubble");
-    bubble.textContent = text;
-    messageDiv.appendChild(bubble);
-    chatWindow.appendChild(messageDiv);
+  /**
+   * API base URL
+   * - Local dev: http://localhost:5000/api
+   * - Deployed: https://your-backend.onrender.com/api
+   */
+  const API_BASE_URL = window.API_BASE_URL || "/api";
+
+  function addMessage(text, sender) {
+    const div = document.createElement("div");
+    div.classList.add("message", sender);
+    div.textContent = text;
+    chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
   }
 
-  chatForm.addEventListener("submit", async function (e) {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const prompt = userInput.value.trim();
+
+    const prompt = input.value.trim();
     if (!prompt) return;
 
-    appendMessage(prompt, "user");
-    userInput.value = "";
-    userInput.disabled = true;
-    appendMessage("...", "bot");
+    addMessage(prompt, "user");
+    input.value = "";
+
+    const typing = document.createElement("div");
+    typing.classList.add("message", "bot");
+    typing.textContent = "Thinking...";
+    chatWindow.appendChild(typing);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
 
     try {
-      const response = await fetch(`${API_URL}/chat`, {
+      const res = await fetch(`${API_BASE_URL}/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ prompt })
       });
 
-      const oldBotMsg = chatWindow.querySelector(".bot:last-child .bubble");
-      if (!response.ok) {
-        oldBotMsg.textContent = "Error: Unable to get response from AI.";
-      } else {
-        const data = await response.json();
-        oldBotMsg.textContent = data.reply || "(No reply)";
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
-    } catch (error) {
-      const oldBotMsg = chatWindow.querySelector(".bot:last-child .bubble");
-      oldBotMsg.textContent = "Error: Unable to connect to backend.";
-    } finally {
-      userInput.disabled = false;
-      userInput.focus();
+
+      const data = await res.json();
+      typing.textContent = data.reply || "No response from AI";
+
+    } catch (err) {
+      console.error(err);
+      typing.textContent = "AI service unavailable";
     }
   });
 });
