@@ -1,28 +1,18 @@
-# AI Chatbot with Ollama
+# AI Chatbot (Flask + Groq)
 
-A full-stack AI chatbot application using Flask backend + Nginx frontend, powered by Ollama for running open-source LLMs locally or in containers.
+A full-stack AI chatbot application with a Flask backend and a static HTML/CSS/JavaScript frontend.  
+The chatbot consumes a cloud-hosted LLM via the Groq API.
 
 ## Architecture
 
-- **Backend**: Flask REST API (`/api/chat` endpoint)
-- **Frontend**: Vanilla JavaScript + HTML/CSS with Nginx serving
-- **LLM**: Ollama (gemma:2b model, customizable)
-- **Containerization**: Docker & Docker Compose
+- **Frontend**: Static HTML/CSS/JavaScript (hosted on Render Static Site)
+- **Backend**: Flask REST API (`/api/chat`) running in Docker (Render Web Service)
+- **LLM**: Groq (cloud-hosted open-source models)
+- **Containerization**: Docker (backend only)
 
-## Prerequisites
+## API Endpoints
 
-- Docker & Docker Compose (v2+)
-- 4GB+ RAM (for Ollama)
-- 5GB+ disk space (for model storage)
-
-## Local Development
-
-### 1. Setup
-
-```bash
-# Clone repository
-git clone <repo-url>
-cd AI-chatbot-using-ollama
-
-# Copy environment template
-cp .env.example .env
+- `POST /api/chat`  
+  Request:
+  ```json
+  { "prompt": "Hello" }
