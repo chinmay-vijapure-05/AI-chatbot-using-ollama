@@ -8,12 +8,13 @@
 body {
   background: #0f172a;
   color: #e5e7eb;
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+/* App container */
 .app {
   width: 100%;
   max-width: 420px;
@@ -23,8 +24,10 @@ body {
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+  overflow: hidden;
 }
 
+/* Header */
 .header {
   padding: 16px;
   background: #020617;
@@ -43,6 +46,7 @@ body {
   color: #22c55e;
 }
 
+/* Chat window */
 .chat-window {
   flex: 1;
   padding: 16px;
@@ -50,14 +54,29 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: #1e293b transparent;
 }
 
+/* Scrollbar (WebKit) */
+.chat-window::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-window::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+/* Messages */
 .message {
-  max-width: 75%;
+  max-width: 80%;
   padding: 10px 14px;
   border-radius: 12px;
   font-size: 0.9rem;
-  line-height: 1.4;
+  line-height: 1.5;
+  word-wrap: break-word;
+  white-space: pre-wrap;
 }
 
 .message.user {
@@ -74,11 +93,13 @@ body {
   border-bottom-left-radius: 4px;
 }
 
+/* Input form */
 .chat-form {
   display: flex;
   padding: 12px;
   border-top: 1px solid #1e293b;
   gap: 10px;
+  background: #020617;
 }
 
 .chat-form input {
@@ -89,12 +110,18 @@ body {
   border-radius: 8px;
   color: #e5e7eb;
   outline: none;
+  font-size: 0.9rem;
 }
 
 .chat-form input::placeholder {
   color: #64748b;
 }
 
+.chat-form input:focus {
+  border-color: #2563eb;
+}
+
+/* Button */
 .chat-form button {
   padding: 10px 16px;
   background: #2563eb;
@@ -103,8 +130,21 @@ body {
   color: white;
   font-weight: 500;
   cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
 }
 
 .chat-form button:hover {
   background: #1d4ed8;
+}
+
+.chat-form button:active {
+  transform: scale(0.97);
+}
+
+/* Mobile tweaks */
+@media (max-width: 480px) {
+  .app {
+    height: 100vh;
+    border-radius: 0;
+  }
 }

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI Chatbot</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -26,6 +26,16 @@
       <button type="submit">Send</button>
     </form>
   </div>
+
+  <!-- Backend API configuration -->
+  <script>
+    /**
+     * CHANGE THIS AFTER BACKEND DEPLOY
+     * Example:
+     * window.API_BASE_URL = "https://your-backend.onrender.com/api";
+     */
+    window.API_BASE_URL = "http://localhost:5000/api";
+  </script>
 
   <script src="main.js"></script>
 </body>
