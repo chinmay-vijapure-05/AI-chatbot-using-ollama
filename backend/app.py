@@ -14,6 +14,11 @@ app = Flask(__name__)
 # IMPORTANT: required for sessions
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-this")
 
+app.config.update(
+    SESSION_COOKIE_SAMESITE="None",  # REQUIRED for cross-origin
+    SESSION_COOKIE_SECURE=True       # REQUIRED on HTTPS (Render)
+)
+
 # Allow cookies for sessions (important for frontend-hosted apps)
 CORS(app, supports_credentials=True)
 
