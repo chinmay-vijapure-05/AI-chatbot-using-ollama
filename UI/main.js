@@ -36,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const res = await fetch(`${API_BASE_URL}/chat`, {
         method: "POST",
+        credentials: "include", // 🔑 REQUIRED for Flask sessions
         headers: {
           "Content-Type": "application/json"
         },

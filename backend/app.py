@@ -1,16 +1,23 @@
 import os
 import logging
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from groq import Groq
 
+# ================= Logging =================
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ================= Flask App =================
 app = Flask(__name__)
-CORS(app)
 
-# ===== Groq Configuration =====
+# IMPORTANT: required for sessions
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-this")
+
+# Allow cookies for sessions (important for frontend-hosted apps)
+CORS(app, supports_credentials=True)
+
+# ================= Groq Configuration =================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
@@ -19,14 +26,22 @@ if not GROQ_API_KEY:
 
 client = Groq(api_key=GROQ_API_KEY)
 
+# ================= Constants =================
+MAX_HISTORY_MESSAGES = 10  # keep last N messages only
 
-def call_groq(prompt: str) -> str:
+
+def call_groq(messages: list) -> str:
+    """
+    messages: list of dicts like
+    [
+      {"role": "user", "content": "..."},
+      {"role": "assistant", "content": "..."}
+    ]
+    """
     try:
         response = client.chat.completions.create(
             model=GROQ_MODEL,
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
+            messages=messages,
             temperature=0.7,
         )
 
@@ -47,7 +62,32 @@ def chat():
     if not data or "prompt" not in data:
         return jsonify({"error": "Missing prompt"}), 400
 
-    reply = call_groq(data["prompt"])
+    user_prompt = data["prompt"].strip()
+
+    # ===== Initialize session memory if missing =====
+    if "history" not in session:
+        session["history"] = []
+
+    # ===== Append user message =====
+    session["history"].append({
+        "role": "user",
+        "content": user_prompt
+    })
+
+    # ===== Trim history to avoid token overflow =====
+    session["history"] = session["history"][-MAX_HISTORY_MESSAGES:]
+
+    # ===== Call Groq with full conversation =====
+    reply = call_groq(session["history"])
+
+    # ===== Append assistant reply =====
+    session["history"].append({
+        "role": "assistant",
+        "content": reply
+    })
+
+    session.modified = True
+
     return jsonify({"reply": reply})
 
 

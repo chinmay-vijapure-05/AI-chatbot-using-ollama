@@ -9,4 +9,5 @@ services:
     environment:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - GROQ_MODEL=llama-3.1-8b-instant
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
     restart: unless-stopped
