@@ -1,5 +1,6 @@
 import os
 import logging
+import requests
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
 from groq import Groq
@@ -19,30 +20,80 @@ app.config.update(
     SESSION_COOKIE_SECURE=True       # REQUIRED on HTTPS (Render)
 )
 
-# Allow cookies for sessions (important for frontend-hosted apps)
+# Allow cookies for sessions
 CORS(app, supports_credentials=True)
 
 # ================= Groq Configuration =================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
-if not GROQ_API_KEY:
-    logger.error("GROQ_API_KEY is not set. AI requests will fail.")
-
 client = Groq(api_key=GROQ_API_KEY)
 
+# ================= Serper Configuration =================
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+SERPER_URL = "https://google.serper.dev/search"
+
 # ================= Constants =================
-MAX_HISTORY_MESSAGES = 10  # keep last N messages only
+MAX_HISTORY_MESSAGES = 10
+MAX_SEARCH_RESULTS = 5
+
+
+# ================= Utilities =================
+def should_use_search(prompt: str) -> bool:
+    """
+    Heuristic to decide when web search is needed
+    """
+    keywords = [
+        "latest", "today", "current", "news", "price",
+        "who is", "what is", "recent", "update", "now"
+    ]
+    prompt_lower = prompt.lower()
+    return any(k in prompt_lower for k in keywords)
+
+
+def serper_search(query: str) -> str:
+    """
+    Calls Serper API and returns formatted snippets
+    """
+    if not SERPER_API_KEY:
+        logger.warning("SERPER_API_KEY not set. Skipping search.")
+        return ""
+
+    headers = {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "q": query,
+        "num": MAX_SEARCH_RESULTS
+    }
+
+    try:
+        response = requests.post(
+            SERPER_URL,
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        snippets = []
+        for item in data.get("organic", []):
+            title = item.get("title", "")
+            snippet = item.get("snippet", "")
+            if title and snippet:
+                snippets.append(f"- {title}: {snippet}")
+
+        return "\n".join(snippets)
+
+    except Exception:
+        logger.exception("Serper API call failed")
+        return ""
 
 
 def call_groq(messages: list) -> str:
-    """
-    messages: list of dicts like
-    [
-      {"role": "user", "content": "..."},
-      {"role": "assistant", "content": "..."}
-    ]
-    """
     try:
         response = client.chat.completions.create(
             model=GROQ_MODEL,
@@ -60,6 +111,7 @@ def call_groq(messages: list) -> str:
         return "Error: AI service not responding"
 
 
+# ================= Routes =================
 @app.route("/api/chat", methods=["POST"])
 def chat():
     data = request.get_json(silent=True)
@@ -69,23 +121,35 @@ def chat():
 
     user_prompt = data["prompt"].strip()
 
-    # ===== Initialize session memory if missing =====
+    # ===== Init session history =====
     if "history" not in session:
         session["history"] = []
 
-    # ===== Append user message =====
+    # ===== Decide if search is needed =====
+    search_context = ""
+    if should_use_search(user_prompt):
+        search_context = serper_search(user_prompt)
+
+    # ===== Build message to LLM =====
+    if search_context:
+        augmented_prompt = (
+            "Use the following web search results to answer accurately.\n\n"
+            f"Search results:\n{search_context}\n\n"
+            f"User question:\n{user_prompt}"
+        )
+    else:
+        augmented_prompt = user_prompt
+
     session["history"].append({
         "role": "user",
-        "content": user_prompt
+        "content": augmented_prompt
     })
 
-    # ===== Trim history to avoid token overflow =====
     session["history"] = session["history"][-MAX_HISTORY_MESSAGES:]
 
-    # ===== Call Groq with full conversation =====
+    # ===== Call Groq =====
     reply = call_groq(session["history"])
 
-    # ===== Append assistant reply =====
     session["history"].append({
         "role": "assistant",
         "content": reply
@@ -102,5 +166,4 @@ def health():
 
 
 if __name__ == "__main__":
-    # Local dev only — ignored in Docker
     app.run(host="0.0.0.0", port=5000)
