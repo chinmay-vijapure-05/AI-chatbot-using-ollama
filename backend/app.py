@@ -1,54 +1,190 @@
 import os
 import logging
-from flask import Flask, request, jsonify
+import requests
+from flask import Flask, request, jsonify, session, Response, stream_with_context
 from flask_cors import CORS
 from groq import Groq
 
+# ================= Logging =================
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ================= Flask App =================
 app = Flask(__name__)
-CORS(app)
 
-# ===== Groq Configuration =====
+# REQUIRED for sessions
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-this")
+
+app.config.update(
+    SESSION_COOKIE_SAMESITE="None",  # cross-origin
+    SESSION_COOKIE_SECURE=True       # HTTPS only (Render)
+)
+
+CORS(app, supports_credentials=True)
+
+# ================= Groq Configuration =================
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
-if not GROQ_API_KEY:
-    logger.error("GROQ_API_KEY is not set. AI requests will fail.")
-
 client = Groq(api_key=GROQ_API_KEY)
 
+# ================= Serper Configuration =================
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+SERPER_URL = "https://google.serper.dev/search"
 
-def call_groq(prompt: str) -> str:
+# ================= Constants =================
+MAX_HISTORY_MESSAGES = 10
+MAX_SEARCH_RESULTS = 5
+
+# ================= Utilities =================
+def should_use_search(prompt: str) -> bool:
+    keywords = [
+        "latest", "today", "current", "news", "price",
+        "who is", "what is", "recent", "update", "now"
+    ]
+    p = prompt.lower()
+    return any(k in p for k in keywords)
+
+
+def serper_search(query: str) -> str:
+    if not SERPER_API_KEY:
+        return ""
+
+    headers = {
+        "X-API-KEY": SERPER_API_KEY,
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "q": query,
+        "num": MAX_SEARCH_RESULTS
+    }
+
+    try:
+        res = requests.post(SERPER_URL, headers=headers, json=payload, timeout=10)
+        res.raise_for_status()
+        data = res.json()
+
+        snippets = []
+        for item in data.get("organic", []):
+            title = item.get("title", "")
+            snippet = item.get("snippet", "")
+            if title and snippet:
+                snippets.append(f"- {title}: {snippet}")
+
+        return "\n".join(snippets)
+
+    except Exception:
+        logger.exception("Serper API failed")
+        return ""
+
+
+def call_groq(messages: list) -> str:
     try:
         response = client.chat.completions.create(
             model=GROQ_MODEL,
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
+            messages=messages,
+            temperature=0.7
         )
-
-        if not response.choices:
-            return "No response from AI"
 
         return response.choices[0].message.content
 
     except Exception:
-        logger.exception("Groq API call failed")
+        logger.exception("Groq call failed")
         return "Error: AI service not responding"
 
 
+# ================= Routes =================
 @app.route("/api/chat", methods=["POST"])
 def chat():
     data = request.get_json(silent=True)
-
     if not data or "prompt" not in data:
         return jsonify({"error": "Missing prompt"}), 400
 
-    reply = call_groq(data["prompt"])
+    prompt = data["prompt"].strip()
+
+    if "history" not in session:
+        session["history"] = []
+
+    search_context = ""
+    if should_use_search(prompt):
+        search_context = serper_search(prompt)
+
+    if search_context:
+        prompt = (
+            "Use the following web search results to answer accurately.\n\n"
+            f"Search results:\n{search_context}\n\n"
+            f"User question:\n{prompt}"
+        )
+
+    session["history"].append({"role": "user", "content": prompt})
+    session["history"] = session["history"][-MAX_HISTORY_MESSAGES:]
+
+    reply = call_groq(session["history"])
+
+    session["history"].append({"role": "assistant", "content": reply})
+    session.modified = True
+
     return jsonify({"reply": reply})
+
+
+@app.route("/api/chat/stream", methods=["POST"])
+def chat_stream():
+    data = request.get_json(silent=True)
+    if not data or "prompt" not in data:
+        return jsonify({"error": "Missing prompt"}), 400
+
+    prompt = data["prompt"].strip()
+
+    if "history" not in session:
+        session["history"] = []
+
+    search_context = ""
+    if should_use_search(prompt):
+        search_context = serper_search(prompt)
+
+    if search_context:
+        prompt = (
+            "Use the following web search results to answer accurately.\n\n"
+            f"Search results:\n{search_context}\n\n"
+            f"User question:\n{prompt}"
+        )
+
+    session["history"].append({"role": "user", "content": prompt})
+    session["history"] = session["history"][-MAX_HISTORY_MESSAGES:]
+
+    def generate():
+        full_reply = ""
+
+        try:
+            stream = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=session["history"],
+                temperature=0.7,
+                stream=True
+            )
+
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    full_reply += delta
+                    yield f"data: {delta}\n\n"
+
+            session["history"].append({
+                "role": "assistant",
+                "content": full_reply
+            })
+            session.modified = True
+            yield "data: [DONE]\n\n"
+
+        except Exception:
+            logger.exception("Streaming failed")
+            yield "data: [ERROR]\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream"
+    )
 
 
 @app.route("/api/health", methods=["GET"])
@@ -57,5 +193,4 @@ def health():
 
 
 if __name__ == "__main__":
-    # Local dev only — ignored in Docker
     app.run(host="0.0.0.0", port=5000)
