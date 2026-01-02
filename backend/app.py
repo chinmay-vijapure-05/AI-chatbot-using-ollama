@@ -16,8 +16,8 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-this")
 
 app.config.update(
-    SESSION_COOKIE_SAMESITE="None",  # cross-origin
-    SESSION_COOKIE_SECURE=True       # HTTPS only (Render)
+    SESSION_COOKIE_SAMESITE="None",
+    SESSION_COOKIE_SECURE=True
 )
 
 CORS(app, supports_credentials=True)
@@ -79,14 +79,13 @@ def serper_search(query: str) -> str:
         return ""
 
 
-def call_groq(messages: list) -> str:
+def call_groq(messages: list, temperature: float = 0.7) -> str:
     try:
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=messages,
-            temperature=0.7
+            temperature=temperature
         )
-
         return response.choices[0].message.content
 
     except Exception:
@@ -101,28 +100,39 @@ def chat():
     if not data or "prompt" not in data:
         return jsonify({"error": "Missing prompt"}), 400
 
-    prompt = data["prompt"].strip()
+    user_prompt = data["prompt"].strip()
 
     if "history" not in session:
         session["history"] = []
 
-    search_context = ""
-    if should_use_search(prompt):
-        search_context = serper_search(prompt)
-
-    if search_context:
-        prompt = (
-            "Use the following web search results to answer accurately.\n\n"
-            f"Search results:\n{search_context}\n\n"
-            f"User question:\n{prompt}"
-        )
-
-    session["history"].append({"role": "user", "content": prompt})
+    # store CLEAN user intent
+    session["history"].append({
+        "role": "user",
+        "content": user_prompt
+    })
     session["history"] = session["history"][-MAX_HISTORY_MESSAGES:]
 
-    reply = call_groq(session["history"])
+    # build temporary LLM messages
+    messages_for_llm = list(session["history"])
 
-    session["history"].append({"role": "assistant", "content": reply})
+    if should_use_search(user_prompt):
+        search_context = serper_search(user_prompt)
+        if search_context:
+            messages_for_llm[-1] = {
+                "role": "user",
+                "content": (
+                    "Use the following web search results to answer accurately.\n\n"
+                    f"Search results:\n{search_context}\n\n"
+                    f"User question:\n{user_prompt}"
+                )
+            }
+
+    reply = call_groq(messages_for_llm, temperature=0.3)
+
+    session["history"].append({
+        "role": "assistant",
+        "content": reply
+    })
     session.modified = True
 
     return jsonify({"reply": reply})
@@ -134,24 +144,31 @@ def chat_stream():
     if not data or "prompt" not in data:
         return jsonify({"error": "Missing prompt"}), 400
 
-    prompt = data["prompt"].strip()
+    user_prompt = data["prompt"].strip()
 
     if "history" not in session:
         session["history"] = []
 
-    search_context = ""
-    if should_use_search(prompt):
-        search_context = serper_search(prompt)
-
-    if search_context:
-        prompt = (
-            "Use the following web search results to answer accurately.\n\n"
-            f"Search results:\n{search_context}\n\n"
-            f"User question:\n{prompt}"
-        )
-
-    session["history"].append({"role": "user", "content": prompt})
+    # store CLEAN user intent
+    session["history"].append({
+        "role": "user",
+        "content": user_prompt
+    })
     session["history"] = session["history"][-MAX_HISTORY_MESSAGES:]
+
+    messages_for_llm = list(session["history"])
+
+    if should_use_search(user_prompt):
+        search_context = serper_search(user_prompt)
+        if search_context:
+            messages_for_llm[-1] = {
+                "role": "user",
+                "content": (
+                    "Use the following web search results to answer accurately.\n\n"
+                    f"Search results:\n{search_context}\n\n"
+                    f"User question:\n{user_prompt}"
+                )
+            }
 
     def generate():
         full_reply = ""
@@ -159,8 +176,8 @@ def chat_stream():
         try:
             stream = client.chat.completions.create(
                 model=GROQ_MODEL,
-                messages=session["history"],
-                temperature=0.7,
+                messages=messages_for_llm,
+                temperature=0.3,
                 stream=True
             )
 

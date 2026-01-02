@@ -23,9 +23,13 @@ document.addEventListener("DOMContentLoaded", () => {
     addMessage(prompt, "user");
     input.value = "";
 
-    const botDiv = addMessage("", "bot");
+    // show placeholder immediately
+    const botDiv = addMessage("Thinking...", "bot");
 
     try {
+      // allow browser to paint "Thinking..."
+      await new Promise(requestAnimationFrame);
+
       const res = await fetch(`${API_BASE_URL}/chat/stream`, {
         method: "POST",
         credentials: "include",
@@ -41,6 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
+      let firstToken = true;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -57,6 +62,12 @@ document.addEventListener("DOMContentLoaded", () => {
           if (data === "[ERROR]") {
             botDiv.textContent += "\n⚠️ Error generating response.";
             return;
+          }
+
+          // clear "Thinking..." only once
+          if (firstToken) {
+            botDiv.textContent = "";
+            firstToken = false;
           }
 
           botDiv.textContent += data;
