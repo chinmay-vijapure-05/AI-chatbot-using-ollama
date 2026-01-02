@@ -37,6 +37,14 @@ MAX_HISTORY_MESSAGES = 10
 MAX_SEARCH_RESULTS = 5
 
 # ================= Utilities =================
+def is_small_talk(prompt: str) -> bool:
+    return prompt.lower().strip() in {
+        "hi", "hello", "hey", "hii",
+        "thanks", "thank you",
+        "ok", "okay"
+    }
+
+
 def should_use_search(prompt: str) -> bool:
     keywords = [
         "latest", "today", "current", "news", "price",
@@ -105,6 +113,13 @@ def chat():
     if "history" not in session:
         session["history"] = []
 
+    # ---- SMALL TALK GUARD ----
+    if is_small_talk(user_prompt):
+        reply = "Hi! How can I help you today?"
+        session["history"].append({"role": "assistant", "content": reply})
+        session.modified = True
+        return jsonify({"reply": reply})
+
     # store CLEAN user intent
     session["history"].append({
         "role": "user",
@@ -112,7 +127,6 @@ def chat():
     })
     session["history"] = session["history"][-MAX_HISTORY_MESSAGES:]
 
-    # build temporary LLM messages
     messages_for_llm = list(session["history"])
 
     if should_use_search(user_prompt):
@@ -148,6 +162,23 @@ def chat_stream():
 
     if "history" not in session:
         session["history"] = []
+
+    # ---- SMALL TALK GUARD (STREAMING) ----
+    if is_small_talk(user_prompt):
+        def generate():
+            yield "data: Hi! How can I help you today?\n\n"
+            yield "data: [DONE]\n\n"
+
+        session["history"].append({
+            "role": "assistant",
+            "content": "Hi! How can I help you today?"
+        })
+        session.modified = True
+
+        return Response(
+            stream_with_context(generate()),
+            mimetype="text/event-stream"
+        )
 
     # store CLEAN user intent
     session["history"].append({
